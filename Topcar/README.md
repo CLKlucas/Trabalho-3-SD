@@ -1,8 +1,8 @@
-# Topcar - Trabalho 3 FastAPI
+# Topcar - Trabalho 3 FastAPI + RabbitMQ
 
 Projeto da disciplina de Sistemas Distribuidos.
 
-Esta versao reimplementa o servico remoto do Trabalho 2 como uma API HTTP usando FastAPI. O servico nao usa RMI nem sockets criados manualmente. A comunicacao cliente-servidor acontece por endpoints REST com JSON.
+Esta versao reimplementa o servico remoto do Trabalho 2 como uma API HTTP usando FastAPI. Alem da comunicacao direta cliente-servidor por REST, o projeto tambem usa comunicacao indireta com RabbitMQ para publicar eventos do dominio.
 
 ## Precisa de extensao?
 
@@ -10,6 +10,7 @@ Nao precisa de extensao obrigatoria na IDE. O que precisa instalar sao dependenc
 
 - `fastapi`
 - `uvicorn`
+- `pika`
 
 Extensoes como Python, Pylance ou REST Client no VS Code ajudam, mas sao opcionais.
 
@@ -20,8 +21,10 @@ api_fastapi/main.py        Rotas HTTP da API FastAPI
 api_fastapi/schemas.py     Modelos de entrada das requisicoes
 api_fastapi/service.py     Regras de negocio do catalogo Topcar
 api_fastapi/database.py    Dados em memoria usados pela API
+api_fastapi/messaging.py   Publicacao de eventos no RabbitMQ
 api_fastapi/serializers.py Formatacao das respostas JSON
 api_fastapi/exceptions.py  Excecoes da camada de servico
+consumers                  Consumidor RabbitMQ de demonstracao
 clients/javascript         Cliente em JavaScript
 clients/java               Cliente em Java
 RELATORIO.md               Relatorio resumido dos servicos remotos
@@ -60,6 +63,62 @@ A documentacao automatica do FastAPI fica em:
 ```text
 http://localhost:8000/docs
 ```
+
+## RabbitMQ
+
+O RabbitMQ e usado para comunicacao indireta. A API publica eventos em uma exchange topica chamada `topcar.eventos`.
+Por padrao, a publicacao fica desabilitada para permitir testar a API sem precisar subir o broker.
+
+Eventos publicados:
+
+```text
+cliente.cadastrado
+pedido.criado
+```
+
+Se voce tiver Docker instalado, suba o RabbitMQ com:
+
+```powershell
+docker compose up -d
+```
+
+Painel de administracao:
+
+```text
+http://localhost:15672
+usuario: guest
+senha: guest
+```
+
+Para habilitar a publicacao de eventos na API:
+
+```powershell
+$env:TOPCAR_RABBITMQ_ENABLED = "true"
+uvicorn api_fastapi.main:app --reload
+```
+
+Em outro terminal, rode o consumidor:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python consumers\rabbitmq_consumer.py
+```
+
+Fluxo esperado:
+
+```text
+Cliente -> FastAPI -> RabbitMQ -> consumidor de eventos
+```
+
+## Teste automatico
+
+Com as dependencias instaladas, rode:
+
+```powershell
+python tests\api_smoke_test.py
+```
+
+Esse teste usa a API em memoria e nao exige RabbitMQ ativo.
 
 ## Endpoints
 

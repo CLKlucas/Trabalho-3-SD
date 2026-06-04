@@ -3,13 +3,19 @@ from typing import Any
 
 from api_fastapi.database import TopcarDatabase
 from api_fastapi.exceptions import RecursoNaoEncontrado
+from api_fastapi.messaging import RabbitMQPublisher, publisher
 from api_fastapi.schemas import ClienteEntrada, PedidoEntrada
 from api_fastapi.serializers import decimal_texto, serializar_peca
 
 
 class CatalogoTopcarService:
-    def __init__(self, database: TopcarDatabase) -> None:
+    def __init__(
+        self,
+        database: TopcarDatabase,
+        event_publisher: RabbitMQPublisher = publisher,
+    ) -> None:
         self.database = database
+        self.event_publisher = event_publisher
 
     def listar_operacoes(self) -> dict[str, list[str]]:
         return {
@@ -39,6 +45,10 @@ class CatalogoTopcarService:
             "idade": cliente.idade,
             "pedidos": [],
         }
+        self.event_publisher.publish(
+            "cliente.cadastrado",
+            {"cliente": self.database.clientes[cliente.cpf]},
+        )
         return {"cliente": self.database.clientes[cliente.cpf]}
 
     def consultar_cliente(self, cpf: str) -> dict[str, dict[str, Any]]:
@@ -79,7 +89,16 @@ class CatalogoTopcarService:
         self.database.pedidos[pedido["id"]] = pedido
         cliente["pedidos"].append(pedido)
 
-        return {"pedido": pedido, "total": decimal_texto(total)}
+        result = {"pedido": pedido, "total": decimal_texto(total)}
+        self.event_publisher.publish(
+            "pedido.criado",
+            {
+                "cpf": pedido_entrada.cpf,
+                "pedido": pedido,
+                "total": result["total"],
+            },
+        )
+        return result
 
     def calcular_total_pedido(self, pedido_id: int) -> dict[str, Any]:
         pedido = self.database.pedidos.get(pedido_id)
