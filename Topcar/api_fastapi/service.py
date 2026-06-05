@@ -8,26 +8,9 @@ from api_fastapi.schemas import ClienteEntrada, PedidoEntrada
 from api_fastapi.serializers import decimal_texto, serializar_peca
 
 
-class CatalogoTopcarService:
-    def __init__(
-        self,
-        database: TopcarDatabase,
-        event_publisher: RabbitMQPublisher = publisher,
-    ) -> None:
+class PecaService:
+    def __init__(self, database: TopcarDatabase) -> None:
         self.database = database
-        self.event_publisher = event_publisher
-
-    def listar_operacoes(self) -> dict[str, list[str]]:
-        return {
-            "operacoes": [
-                "GET /api/pecas",
-                "GET /api/pecas/{id}",
-                "POST /api/clientes",
-                "GET /api/clientes/{cpf}",
-                "POST /api/pedidos",
-                "GET /api/pedidos/{id}/total",
-            ]
-        }
 
     def listar_pecas(self) -> dict[str, list[dict[str, Any]]]:
         return {"pecas": [serializar_peca(peca) for peca in self.database.estoque.values()]}
@@ -37,6 +20,16 @@ class CatalogoTopcarService:
         if peca is None:
             raise RecursoNaoEncontrado(f"Peca nao encontrada: {peca_id}")
         return {"peca": serializar_peca(peca)}
+
+
+class ClienteService:
+    def __init__(
+        self,
+        database: TopcarDatabase,
+        event_publisher: RabbitMQPublisher = publisher,
+    ) -> None:
+        self.database = database
+        self.event_publisher = event_publisher
 
     def cadastrar_cliente(self, cliente: ClienteEntrada) -> dict[str, dict[str, Any]]:
         self.database.clientes[cliente.cpf] = {
@@ -56,6 +49,16 @@ class CatalogoTopcarService:
         if cliente is None:
             raise RecursoNaoEncontrado(f"Cliente nao encontrado: {cpf}")
         return {"cliente": cliente}
+
+
+class PedidoService:
+    def __init__(
+        self,
+        database: TopcarDatabase,
+        event_publisher: RabbitMQPublisher = publisher,
+    ) -> None:
+        self.database = database
+        self.event_publisher = event_publisher
 
     def criar_pedido(self, pedido_entrada: PedidoEntrada) -> dict[str, Any]:
         cliente = self.database.clientes.get(pedido_entrada.cpf)
@@ -107,3 +110,48 @@ class CatalogoTopcarService:
 
         total = sum(Decimal(item["valorTotal"]) for item in pedido["itens"])
         return {"pedidoId": pedido_id, "total": decimal_texto(total)}
+
+
+class CatalogoTopcarService:
+    def __init__(
+        self,
+        database: TopcarDatabase,
+        event_publisher: RabbitMQPublisher = publisher,
+    ) -> None:
+        self.pecas = PecaService(database)
+        self.clientes = ClienteService(database, event_publisher)
+        self.pedidos = PedidoService(database, event_publisher)
+
+    def listar_operacoes(self) -> dict[str, list[str]]:
+        return listar_operacoes()
+
+    def listar_pecas(self) -> dict[str, list[dict[str, Any]]]:
+        return self.pecas.listar_pecas()
+
+    def buscar_peca(self, peca_id: int) -> dict[str, dict[str, Any]]:
+        return self.pecas.buscar_peca(peca_id)
+
+    def cadastrar_cliente(self, cliente: ClienteEntrada) -> dict[str, dict[str, Any]]:
+        return self.clientes.cadastrar_cliente(cliente)
+
+    def consultar_cliente(self, cpf: str) -> dict[str, dict[str, Any]]:
+        return self.clientes.consultar_cliente(cpf)
+
+    def criar_pedido(self, pedido_entrada: PedidoEntrada) -> dict[str, Any]:
+        return self.pedidos.criar_pedido(pedido_entrada)
+
+    def calcular_total_pedido(self, pedido_id: int) -> dict[str, Any]:
+        return self.pedidos.calcular_total_pedido(pedido_id)
+
+
+def listar_operacoes() -> dict[str, list[str]]:
+    return {
+        "operacoes": [
+            "GET /api/pecas",
+            "GET /api/pecas/{id}",
+            "POST /api/clientes",
+            "GET /api/clientes/{cpf}",
+            "POST /api/pedidos",
+            "GET /api/pedidos/{id}/total",
+        ]
+    }
